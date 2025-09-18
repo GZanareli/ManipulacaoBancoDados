@@ -4,69 +4,78 @@ format: html
 ---
 
 ```{r}
-#install.packages("RSQLite")
-library(RSQLite)
+install.packages("RSQLite")
+library(RSQLite) # Carrega a biblioteca para conexão com SQLite
 ```
 
 ```{r}
-db <- dbConnect(SQLite(), '../Desafio05/disco.db')
+db <- dbConnect(SQLite(), '../Desafio05/disco.db') # Conecta ao banco de dados SQLite
 db
 ```
 
 ```{r}
-dbListTables(db)
+dbListTables(db) # Lista todas as tabelas do banco
 ```
 
 ```{r}
-dbListFields(db,'albums')
+dbListFields(db,'albums') # Lista os campos (colunas) da tabela 'albums'
 ```
 
 ```{r}
+# Seleciona todos os dados da tabela albums e mostra as primeiras linhas
 album_db = dbGetQuery(db,'SELECT * FROM albums')
 head(album_db)
 ```
 
 ```{r}
-dim(album_db)
+dim(album_db) # Mostra as dimensões (linhas x colunas) da tabela albums
 ```
 
 ```{r}
+# Consulta tracks ordenados por preço (mais baratos primeiro)
 sql = 'SELECT trackid, name, composer, unitprice FROM tracks ORDER BY unitprice'
 res = dbGetQuery(db, sql)
 head(res)
 ```
 
 ```{r}
+# Seleciona cidades dos clientes ordenadas alfabeticamente
 sql2 = 'SELECT city FROM customers ORDER BY city'
 ex3a = dbGetQuery(db, sql2)
 head(ex3a)
 ```
 
 ```{r}
+# Mostra quantas cidades há (com repetição)
 dim(ex3a)
 ```
 
 ```{r}
+# Seleciona cidades distintas dos clientes
 sql3 = 'SELECT DISTINCT city FROM customers ORDER BY city'
 ex3b = dbGetQuery(db, sql3)
 head(ex3b)
 ```
 
 ```{r}
+# Mostra quantas cidades distintas há
 dim(ex3b)
 ```
 
 ```{r}
+# Seleciona músicas do álbum com ID 1
 db_alb_1 <- dbGetQuery(db,'SELECT name, albumid FROM tracks WHERE albumid=1')
 ```
 
 ```{r}
+# Seleciona as 5 primeiras músicas dos formatos 1 e 2, ordenadas por nome
 sql4 = paste('SELECT name, albumid, mediatypeid FROM tracks',
              'WHERE mediatypeid IN (1, 2)','ORDER BY name LIMIT 5')
 dbGetQuery(db, sql4)
 ```
 
 ```{r}
+# Seleciona músicas do artista com ID 12 usando subconsulta
 sql5 = paste('SELECT trackid, name, albumid FROM tracks'
 ,
 'WHERE albumid IN'
@@ -76,21 +85,25 @@ dbGetQuery(db, sql5)
 ```
 
 ```{r}
+# Busca músicas com padrão específico no nome (usando GLOB)
 sql6 = "SELECT trackid, name FROM tracks WHERE name GLOB '?ere*'"
 dbGetQuery(db, sql6)
 ```
 
 ```{r}
+# Busca músicas que contenham números no nome
 sql7 = "SELECT trackid, name FROM tracks WHERE name GLOB '*[0-9]*'"
 dbGetQuery(db, sql7)
 ```
 
 ```{r}
+# Conta quantas músicas cada álbum possui
 sql8 = 'SELECT albumid, COUNT(trackid) FROM tracks GROUP BY albumid'
 dbGetQuery(db, sql8)
 ```
 
 ```{r}
+# Conta músicas apenas do álbum com ID 1 (usando HAVING)
 sql9 = paste('SELECT albumid, COUNT(trackid)'
 ,
 'FROM tracks GROUP BY albumid'
@@ -100,6 +113,7 @@ dbGetQuery(db, sql9)
 ```
 
 ```{r}
+# Junta tabelas tracks e albums para mostrar nome da música e título do álbum
 sql10 = paste('SELECT trackid, name, title FROM tracks'
 ,
 'INNER JOIN albums ON albums.albumid=tracks.albumid')
