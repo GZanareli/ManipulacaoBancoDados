@@ -1,0 +1,188 @@
+---
+title: "Desafio06"
+format: html
+---
+
+SQLite
+
+O SQLite é uma biblioteca embutida em um processo único que é autônomo, não necessita de servidor e exige zero de configuração. O código é de domínio público e seu uso é gratuito em qualquer tipo de utilização. Trata-se de um sistema SQL completo, capaz de utilizar múltiplas tabelas, índices, gatilhos e visões. Ele funciona, virtualmente, em qualquer plataforme (incluindo móveis) e pesa cerca de 600KB.
+
+Objetivos
+
+Ao fim deste laboratório, você deverá ser capaz de: - Conectar-se a um banco de dados do tipo SQLite utilizando o R como interface; - Explorar quais são as tabelas disponíveis no referido banco de dados; - Identificar quais são as colunas de uma dada tabela existente no banco de dados; - Realizar pesquisas simples; - Extrair registros do banco de dados e armazená-las em objetos do R; - Realizar pesquisas mais complexas, utilizando WHERE, GROUP BY, INNER JOIN, HAVING, LIMIT, DISTINCT e GLOB.
+
+Recomendações Gerais
+
+Toda manipulação de dados deve ocorrer com verbos do pacote dplyr.
+O livro R for Data Science possui um excelente capítulo sobre strings.
+
+Atividade
+
+1. Baixe o arquivo disco.db e armazene na variável path o caminho completo (pasta) na qual o arquivo foi gravado. Utilize o comando file.path() para combinar a variável path com o nome do arquivo (disco.db) e obter o nome do arquivo com seu respectivo caminho. Armazene este resultado na variável fname.
+
+```{r}
+# Obtém o diretório de trabalho atual e combina com o nome do arquivo
+path <- getwd()
+fname <- file.path(path, "disco.db")
+```
+
+
+2. Utilizando o pacote RSQLite, conecte-se ao arquivo de banco de dados. Armazene a conexão na variável conn.
+
+```{r}
+# Estabelece conexão com o arquivo disco.db
+library(RSQLite)
+conn <- dbConnect(RSQLite::SQLite(), fname)
+```
+
+3. Liste as tabelas existentes no banco de dados.
+
+```{r}
+# Mostra todas as tabelas disponíveis no banco
+tabelas <- dbListTables(conn)
+tabelas
+```
+
+4. Identifique os nomes de todas as colunas existentes na tabela customers.
+
+```{r}
+# Mostra todos os campos/colunas da tabela customers
+colunas_customers <- dbListFields(conn, "customers")
+colunas_customers
+```
+
+5. Utilizando apenas SQLite, com o apoio do comando dbGetQuery, identifique quantos clientes estão atualmente cadastrados neste banco de dados.
+
+```{r}
+# Consulta SQL para contar registros na tabela customers
+total_clientes <- dbGetQuery(conn, "SELECT COUNT(*) as total FROM customers")
+total_clientes$total
+```
+
+6. Utilizando apenas SQLite, identifique o número de países diferentes em que moram os clientes encontrados acima.
+
+```{r}
+# Consulta que conta valores únicos na coluna Country
+paises_diferentes <- dbGetQuery(conn, "SELECT COUNT(DISTINCT Country) as paises FROM customers")
+paises_diferentes$paises
+```
+
+7. Utilizando apenas SQLite, quantos clientes existem por país? A tabela resultante deve conter o nome do país e a respectiva contagem, além de ser ordenada de maneira decrescente pela referida contagem.
+
+```{r}
+# Agrupa por país e conta clientes, ordenando do maior para menor
+clientes_por_pais <- dbGetQuery(conn, "
+    SELECT Country, COUNT(*) as total_clientes 
+    FROM customers 
+    GROUP BY Country 
+    ORDER BY total_clientes DESC")
+
+clientes_por_pais
+```
+
+8. Quais são os 5 países com mais clientes registrados? Use apenas SQLite.
+
+```{r}
+# Similar ao anterior mas limitando a 5 resultados
+top5_paises <- dbGetQuery(conn, "
+    SELECT Country, COUNT(*) as total_clientes 
+    FROM customers 
+    GROUP BY Country 
+    ORDER BY total_clientes DESC 
+    LIMIT 5")
+top5_paises
+```
+
+9. Quais são os países registrados que possuem apenas 6 letras no nome?
+
+```{r}
+# Filtra países onde o nome tem comprimento igual a 6 caracteres
+paises_6_letras <- dbGetQuery(conn, "
+    SELECT DISTINCT Country 
+    FROM customers 
+    WHERE LENGTH(Country) = 6
+    ORDER BY Country
+")
+paises_6_letras
+```
+
+10. Quais foram as músicas compradas por clientes brasileiros?
+
+```{r}
+# Consulta com JOIN entre 4 tabelas (tracks, invoice_items, invoices e customers) para relacionar clientes brasileiros com músicas compradas
+musicas_brasileiros <- dbGetQuery(conn, "
+    SELECT DISTINCT t.Name as musica
+    FROM tracks t
+    INNER JOIN invoice_items ii ON t.TrackId = ii.TrackId
+    INNER JOIN invoices i ON ii.InvoiceId = i.InvoiceId
+    INNER JOIN customers c ON i.CustomerId = c.CustomerId
+    WHERE c.Country = 'Brazil'
+    ORDER BY t.Name
+")
+head(musicas_brasileiros)
+```
+
+11. Qual o álbum mais tocado por país? (Pergunta 1 - Desafio 06)
+
+```{r}
+# Consulta aninhada que encontra o álbum com mais reproduções por país
+album_mais_tocado <- dbGetQuery(conn, "
+    SELECT c.Country, a.Title as album, COUNT(*) as reproducoes
+    FROM albums a
+    INNER JOIN tracks t ON a.AlbumId = t.AlbumId
+    INNER JOIN invoice_items ii ON t.TrackId = ii.TrackId
+    INNER JOIN invoices i ON ii.InvoiceId = i.InvoiceId
+    INNER JOIN customers c ON i.CustomerId = c.CustomerId
+    GROUP BY c.Country, a.AlbumId
+    HAVING reproducoes = (
+        SELECT COUNT(*)
+        FROM tracks t2
+        INNER JOIN invoice_items ii2 ON t2.TrackId = ii2.TrackId
+        INNER JOIN invoices i2 ON ii2.InvoiceId = i2.InvoiceId
+        INNER JOIN customers c2 ON i2.CustomerId = c2.CustomerId
+        WHERE c2.Country = c.Country AND t2.AlbumId = a.AlbumId
+        GROUP BY t2.AlbumId
+        ORDER BY COUNT(*) DESC
+        LIMIT 1
+    )
+    ORDER BY c.Country, reproducoes DESC
+")
+head(album_mais_tocado)
+```
+
+12. Qual o artista mais tocado por país? (Pergunta 2 - Desafio 06)
+
+```{r}
+# Consulta aninhada similar à anterior, mas para artistas
+artista_mais_tocado <- dbGetQuery(conn, "
+    SELECT c.Country, ar.Name as artista, COUNT(*) as reproducoes
+    FROM artists ar
+    INNER JOIN albums a ON ar.ArtistId = a.ArtistId
+    INNER JOIN tracks t ON a.AlbumId = t.AlbumId
+    INNER JOIN invoice_items ii ON t.TrackId = ii.TrackId
+    INNER JOIN invoices i ON ii.InvoiceId = i.InvoiceId
+    INNER JOIN customers c ON i.CustomerId = c.CustomerId
+    GROUP BY c.Country, ar.ArtistId
+    HAVING reproducoes = (
+        SELECT COUNT(*)
+        FROM artists ar2
+        INNER JOIN albums a2 ON ar2.ArtistId = a2.ArtistId
+        INNER JOIN tracks t2 ON a2.AlbumId = t2.AlbumId
+        INNER JOIN invoice_items ii2 ON t2.TrackId = ii2.TrackId
+        INNER JOIN invoices i2 ON ii2.InvoiceId = i2.InvoiceId
+        INNER JOIN customers c2 ON i2.CustomerId = c2.CustomerId
+        WHERE c2.Country = c.Country AND ar2.ArtistId = ar.ArtistId
+        GROUP BY ar2.ArtistId
+        ORDER BY COUNT(*) DESC
+        LIMIT 1
+    )
+    ORDER BY c.Country, reproducoes DESC
+")
+head(artista_mais_tocado) # Exibe primeiras linhas
+```
+
+13. Desconecte do banco de dados.
+
+```{r}
+dbDisconnect(conn) # Encerra a conexão com o banco de dados
+```

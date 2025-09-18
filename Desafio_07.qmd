@@ -1,0 +1,220 @@
+---
+title: "Desafio07"
+format: html
+---
+## SLIDE 2 ##
+```{r}
+library(RSQLite)
+library(tidyverse)
+```
+
+```{r}
+if(!"discoCopy.db" %in% list.files("../Desafio07/")){
+file.copy("../Desafio07/disco.db", "../Desafio07/discoCopy.db")
+}
+# Modificaremos esse arquivo
+```
+
+```{r}
+db <- dbConnect(SQLite(), "../Desafio07/discoCopy.db")
+```
+
+## SLIDE 4 ##
+
+```{r}
+dbListTables(db)
+```
+
+```{r}
+# Utilizei "CREATE TABLE IF NOT EXISTS" porque o arquivo não renderizava pela tabela já existir.
+dbExecute(db, "CREATE TABLE IF NOT EXISTS instruments
+(AlbumId INTEGER,
+TrackId INTEGER,
+ElectricGuitar INTEGER,
+Singer INTEGER,
+Trumpet INTEGER)")
+```
+
+## SLIDE 5 ##
+
+```{r}
+dbListFields(db, 'instruments')
+```
+
+```{r}
+# Comentei esse código por atrapalhar na renderização do arquivo qmd
+#dbExecute(db, "DROP TABLE instruments")
+```
+
+```{r}
+dbListTables(db)
+```
+
+## SLIDE 6 ##
+
+```{r}
+aname = "Gilberto Gil"
+sql = paste0("SELECT ArtistId FROM artists ",
+"WHERE Name = '", aname, "'")
+aId = dbGetQuery(db, sql)
+sql = paste('SELECT Title FROM albums',
+'WHERE ArtistId =', aId)
+dbGetQuery(db, sql)
+```
+
+```{r}
+aname <- "Gilberto Gil'; DROP TABLE 'albums"
+```
+
+## SLIDE 7 ##
+
+```{r}
+sql = paste("SELECT ArtistId FROM artists",
+"WHERE Name = ?")
+query <- dbSendQuery(db, sql)
+dbBind(query, list("Gilberto Gil"))
+aId <- dbFetch(query)
+dbClearResult(query)# Segundo passo interno, não deve causar problema
+sql = paste('SELECT Title FROM albums',
+'WHERE ArtistId =', aId)
+dbGetQuery(db, sql)
+```
+
+## SLIDE 8 ##
+
+```{r}
+dbListFields(db, 'instruments')
+```
+
+```{r}
+# Eu Tu Eles: AlbumId 85,
+sql = paste('SELECT TrackId, Name FROM tracks',
+'WHERE AlbumId = 85')
+dbGetQuery(db, sql) %>% head
+```
+
+## SLIDE 9 ##
+
+```{r}
+dbExecute(db, "INSERT INTO instruments
+VALUES ('85', '1075', 0, 1, 0),
+('85', '1078', 0, 1, 0); ")
+```
+
+```{r}
+dbGetQuery(db, "SELECT * FROM instruments")
+```
+
+## SLIDE 10 ##
+
+```{r}
+dbWriteTable(db, "mtcars", mtcars, overwrite = T)
+dbListTables(db)
+```
+
+```{r}
+dbGetQuery(db, "SELECT * FROM mtcars") %>% head(3)
+```
+
+## SLIDE 11 ##
+
+```{r}
+theAvgCar <- mtcars %>%
+summarise_all(function(x) round(mean(x), 2))
+theAvgCar
+```
+
+```{r}
+dbWriteTable(db, "mtcars", theAvgCar, append = TRUE)
+dbGetQuery(db, "SELECT * FROM mtcars") %>% tail(3)
+```
+
+## SLIDE 12 ##
+
+```{r}
+dbWriteTable(db, "mtcars", mtcars, overwrite = TRUE)
+dbGetQuery(db, "SELECT * FROM mtcars") %>% tail(3)
+```
+
+## SLIDE 13 ##
+
+```{r}
+res <- dbSendQuery(db, "SELECT * FROM mtcars WHERE cyl = 4")
+while(!dbHasCompleted(res)){
+chunk <- dbFetch(res, n = 5)
+print(nrow(chunk))
+}
+```
+
+```{r}
+dbClearResult(res)
+```
+
+## SLIDE 14 ##
+
+```{r}
+dbDisconnect(db)
+if("discoCopy.db" %in% list.files("../Desafio07/")){
+file.remove("../Desafio07/discoCopy.db")
+}
+```
+
+## SLIDE 15 ##
+
+```{r}
+airports <- read_csv("../Desafio07/airports.csv", col_types = "cccccdd")
+airlines <- read_csv("../Desafio07/airlines.csv", col_types = "cc")
+air <- dbConnect(SQLite(), dbname="../Desafio07/air.db")
+dbWriteTable(air, name = "airports", airports)
+dbWriteTable(air, name = "airlines", airlines)
+dbListTables(air)
+```
+
+## SLIDE 16 ##
+
+```{r}
+dbDisconnect(air)
+if("air.db" %in% list.files("../Desafio07/")){
+file.remove("../Desafio07/air.db")
+}
+```
+
+## SLIDE 17 ##
+
+```{r}
+library(RSQLite)
+library(tidyverse)
+library(dbplyr)
+db <- dbConnect(SQLite(), "../Desafio07/disco.db")
+# original
+tracks <- tbl(db, "tracks")
+# dplyr
+tracks %>% head(3)
+```
+
+## SLIDE 18 ##
+
+```{r}
+meanTracks <- tracks %>%
+group_by(AlbumId) %>%
+summarise(AvLen = mean(Milliseconds, na.rm = TRUE),
+AvCost = mean(UnitPrice, na.rm = TRUE))
+meanTracks
+```
+
+## SLIDE 19 ##
+
+```{r}
+meanTracks %>% show_query()
+```
+
+## SLIDE 20 ##
+
+```{r}
+mT <- meanTracks %>% collect()
+mT
+```
+
+```{r}
+dbDisconnect(db)
+```
