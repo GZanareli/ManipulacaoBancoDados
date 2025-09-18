@@ -4,11 +4,13 @@ format: html
 ---
 ## SLIDE 2 ##
 ```{r}
+# Carrega bibliotecas para manipulação de banco de dados e análise de dados
 library(RSQLite)
 library(tidyverse)
 ```
 
 ```{r}
+# Cria uma cópia do banco de dados para trabalhar sem modificar o original
 if(!"discoCopy.db" %in% list.files("../Desafio07/")){
 file.copy("../Desafio07/disco.db", "../Desafio07/discoCopy.db")
 }
@@ -16,16 +18,19 @@ file.copy("../Desafio07/disco.db", "../Desafio07/discoCopy.db")
 ```
 
 ```{r}
+# Conecta ao banco de dados cópia
 db <- dbConnect(SQLite(), "../Desafio07/discoCopy.db")
 ```
 
 ## SLIDE 4 ##
 
 ```{r}
+# Lista tabelas existentes no banco
 dbListTables(db)
 ```
 
 ```{r}
+# Cria nova tabela 'instruments' se ela não existir
 # Utilizei "CREATE TABLE IF NOT EXISTS" porque o arquivo não renderizava pela tabela já existir.
 dbExecute(db, "CREATE TABLE IF NOT EXISTS instruments
 (AlbumId INTEGER,
@@ -38,21 +43,25 @@ Trumpet INTEGER)")
 ## SLIDE 5 ##
 
 ```{r}
+# Mostra os campos da tabela instruments
 dbListFields(db, 'instruments')
 ```
 
 ```{r}
-# Comentei esse código por atrapalhar na renderização do arquivo qmd
-#dbExecute(db, "DROP TABLE instruments")
+# Código que removeria a tabela (não executado)
+# Comentei esse código por atrapalhar na renderização do arquivo .qmd
+# dbExecute(db, "DROP TABLE instruments")
 ```
 
 ```{r}
+# Lista tabelas novamente para verificar
 dbListTables(db)
 ```
 
 ## SLIDE 6 ##
 
 ```{r}
+# Consulta vulnerável a SQL Injection - busca álbuns de Gilberto Gil
 aname = "Gilberto Gil"
 sql = paste0("SELECT ArtistId FROM artists ",
 "WHERE Name = '", aname, "'")
@@ -63,12 +72,14 @@ dbGetQuery(db, sql)
 ```
 
 ```{r}
+# Demonstração de como uma string maliciosa poderia ser usada em SQL Injection
 aname <- "Gilberto Gil'; DROP TABLE 'albums"
 ```
 
 ## SLIDE 7 ##
 
 ```{r}
+# Consulta segura usando parâmetros preparados para evitar SQL Injection
 sql = paste("SELECT ArtistId FROM artists",
 "WHERE Name = ?")
 query <- dbSendQuery(db, sql)
@@ -83,10 +94,12 @@ dbGetQuery(db, sql)
 ## SLIDE 8 ##
 
 ```{r}
+# Mostra campos da tabela instruments
 dbListFields(db, 'instruments')
 ```
 
 ```{r}
+# Consulta músicas do álbum com ID 85
 # Eu Tu Eles: AlbumId 85,
 sql = paste('SELECT TrackId, Name FROM tracks',
 'WHERE AlbumId = 85')
@@ -96,35 +109,41 @@ dbGetQuery(db, sql) %>% head
 ## SLIDE 9 ##
 
 ```{r}
+# Insere dados na tabela instruments
 dbExecute(db, "INSERT INTO instruments
 VALUES ('85', '1075', 0, 1, 0),
 ('85', '1078', 0, 1, 0); ")
 ```
 
 ```{r}
+# Verifica os dados inseridos
 dbGetQuery(db, "SELECT * FROM instruments")
 ```
 
 ## SLIDE 10 ##
 
 ```{r}
+# Escreve dataset mtcars como nova tabela no banco (sobrescreve se existir)
 dbWriteTable(db, "mtcars", mtcars, overwrite = T)
 dbListTables(db)
 ```
 
 ```{r}
+# Mostra primeiras linhas da tabela mtcars
 dbGetQuery(db, "SELECT * FROM mtcars") %>% head(3)
 ```
 
 ## SLIDE 11 ##
 
 ```{r}
+# Calcula média de todas as colunas do mtcars
 theAvgCar <- mtcars %>%
 summarise_all(function(x) round(mean(x), 2))
 theAvgCar
 ```
 
 ```{r}
+# Adiciona a linha de médias à tabela mtcars
 dbWriteTable(db, "mtcars", theAvgCar, append = TRUE)
 dbGetQuery(db, "SELECT * FROM mtcars") %>% tail(3)
 ```
@@ -132,6 +151,7 @@ dbGetQuery(db, "SELECT * FROM mtcars") %>% tail(3)
 ## SLIDE 12 ##
 
 ```{r}
+# Restaura tabela mtcars original (sobrescrevendo)
 dbWriteTable(db, "mtcars", mtcars, overwrite = TRUE)
 dbGetQuery(db, "SELECT * FROM mtcars") %>% tail(3)
 ```
@@ -139,6 +159,7 @@ dbGetQuery(db, "SELECT * FROM mtcars") %>% tail(3)
 ## SLIDE 13 ##
 
 ```{r}
+# Consulta com fetch em chunks - busca carros com 4 cilindros
 res <- dbSendQuery(db, "SELECT * FROM mtcars WHERE cyl = 4")
 while(!dbHasCompleted(res)){
 chunk <- dbFetch(res, n = 5)
@@ -147,12 +168,14 @@ print(nrow(chunk))
 ```
 
 ```{r}
+# Limpa o resultado da consulta
 dbClearResult(res)
 ```
 
 ## SLIDE 14 ##
 
 ```{r}
+# Desconecta do banco e remove o arquivo cópia
 dbDisconnect(db)
 if("discoCopy.db" %in% list.files("../Desafio07/")){
 file.remove("../Desafio07/discoCopy.db")
@@ -162,6 +185,7 @@ file.remove("../Desafio07/discoCopy.db")
 ## SLIDE 15 ##
 
 ```{r}
+# Lê dados de aeroportos e companhias aéreas e cria novo banco
 airports <- read_csv("../Desafio07/airports.csv", col_types = "cccccdd")
 airlines <- read_csv("../Desafio07/airlines.csv", col_types = "cc")
 air <- dbConnect(SQLite(), dbname="../Desafio07/air.db")
@@ -173,6 +197,7 @@ dbListTables(air)
 ## SLIDE 16 ##
 
 ```{r}
+# Desconecta e remove banco de dados air
 dbDisconnect(air)
 if("air.db" %in% list.files("../Desafio07/")){
 file.remove("../Desafio07/air.db")
@@ -182,6 +207,7 @@ file.remove("../Desafio07/air.db")
 ## SLIDE 17 ##
 
 ```{r}
+# Conecta ao banco original e usa dbplyr para manipulação com sintaxe dplyr
 library(RSQLite)
 library(tidyverse)
 library(dbplyr)
@@ -195,6 +221,7 @@ tracks %>% head(3)
 ## SLIDE 18 ##
 
 ```{r}
+# Agrupa e resume dados usando dplyr (execução lazy)
 meanTracks <- tracks %>%
 group_by(AlbumId) %>%
 summarise(AvLen = mean(Milliseconds, na.rm = TRUE),
@@ -205,16 +232,19 @@ meanTracks
 ## SLIDE 19 ##
 
 ```{r}
+# Mostra a query SQL que será executada
 meanTracks %>% show_query()
 ```
 
 ## SLIDE 20 ##
 
 ```{r}
+# Executa a query e traz os dados para a memória
 mT <- meanTracks %>% collect()
 mT
 ```
 
 ```{r}
+# Desconecta do banco
 dbDisconnect(db)
 ```
