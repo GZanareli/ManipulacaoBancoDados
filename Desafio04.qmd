@@ -1,0 +1,202 @@
+---
+title: "Desafio_4"
+author: "Luciano Floriano e Gustavo Zanareli (RA's: 277195 e 185666"
+format: html
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Crie uma função que: a. Receba um valor de TAIL_NUMBER (por exemplo, N431WN); b. Produza uma tabela (tidy) com todos os trajetos realizados pela aeronave (ordenadas por data e hora, contendo todas as colunas do arquivo flights.csv.zip); c. Produza um mapa que apresente todo o trajeto voado pela aeronave ao longo de todo o ano; o trajeto deve ser apresentado de maneira linear no tempo (i.e., segue a sequência do tempo, como no exemplo hipotético dado acima); d. O mapa deve ser decorado com estatísticas do seu interesse (por exemplo, velocidade média do vôo como espessura da linha que conecta os aeroportos envolvidos no trajeto);
+
+```{r, warning=FALSE, message=FALSE}
+# Carregar pacotes necessários
+library(tidyverse)
+library(ggplot2)
+library(leaflet)
+library(ggmap)
+library(readr) 
+library(lubridate)  # Para manipulação de datas
+```
+
+```{r}
+# Definir função analisa_aeronave
+analisa_aeronave <- function(tail_number, arquivo) {
+
+  # PARTE 1: LEITURA E PROCESSAMENTO DOS DADOS
+  
+  # Carregar dados dos aeroportos (coordenadas)
+  # Nota: Assumindo que o arquivo "airports.csv" está no mesmo diretório/pasta que o arquivo "flights.csv.zip"
+  airports_file <- file.path(dirname(arquivo), "airports.csv")
+  
+  # Verificar se o arquivo de aeroportos existe
+  if (!file.exists(airports_file)) {
+    stop("Arquivo airports.csv não encontrado no diretório do arquivo flights")
+  }
+  
+  # Ler dados dos aeroportos
+  airports <- read_csv(airports_file) %>%
+    select(IATA_CODE, LATITUDE, LONGITUDE) %>% na.omit() # selecionando colunas úteis para futuro cruzamento de dados
+  
+  # Inicializar lista para armazenar chunks filtrados
+  trajetos_lista <- list()
+  contador <- 1
+  
+  # Função callback para processar cada chunk
+  processar_chunk <- function(chunk, pos) {
+    # Filtrar apenas os voos do tail_number especificado
+    chunk_filtrado <- chunk %>% 
+      filter(TAIL_NUMBER == tail_number, CANCELLED == 0) %>% # filtrando pelo código do avião e removendo voos cancelados (apenas voos realizados foram considerados)
+      arrange(YEAR, MONTH, DAY, SCHEDULED_DEPARTURE)  # Ordenar por data e hora
+  if (nrow(chunk_filtrado) > 0) { # armazena o chunk sempre que encontrar linhas após filtragem
+      trajetos_lista[[contador]] <<- chunk_filtrado
+      contador <<- contador + 1
+    }
+    return(NULL)  # Não acumular dados brutos
+  }
+
+  # Ler o arquivo em chunks
+  message("Processando arquivo... Isso pode levar alguns minutos")
+  read_csv_chunked(
+    arquivo,
+    callback = SideEffectChunkCallback$new(processar_chunk),
+    chunk_size = 100000,  # Ajuste conforme necessário
+    progress = TRUE      # Mostrar barra de progresso
+  )
+  
+  # Combinar todos os chunks filtrados
+  if (length(trajetos_lista) > 0) {
+    trajetos_finais <- bind_rows(trajetos_lista) %>% 
+      arrange(YEAR, MONTH, DAY, DEPARTURE_TIME) %>% 
+      mutate(DEPARTURE_TIME = as.numeric(DEPARTURE_TIME)) %>%
+      mutate(DATA_HORA = make_datetime(YEAR, MONTH, DAY, DEPARTURE_TIME %/% 100, DEPARTURE_TIME %% 100)) # criando coluna de data/hora
+    
+    message(paste("Encontrados", nrow(trajetos_finais), "voos para a aeronave", tail_number))
+  } else {
+    message(paste("Nenhum voo encontrado para a aeronave", tail_number))
+    return(NULL)
+  }
+  
+  # Adicionar coordenadas dos aeroportos de origem
+  trajetos_finais <- trajetos_finais %>%
+    left_join(airports, by = c("ORIGIN_AIRPORT" = "IATA_CODE")) %>%
+    rename(origin_lat=LATITUDE,
+           origin_lon=LONGITUDE) # renomeando colunas para não gerar 2 colunas com mesmo nome
+  
+  # Adicionar coordenadas dos aeroportos de destino
+  trajetos_finais <- trajetos_finais %>%
+    left_join(airports, by = c("DESTINATION_AIRPORT" = "IATA_CODE")) %>%
+    rename(destination_lat=LATITUDE,
+           destination_lon=LONGITUDE) # renomeando colunas para não gerar 2 colunas com mesmo nome
+  
+  # Calcular velocidade média (milhas por hora)
+  trajetos_finais <- trajetos_finais %>%
+    mutate(
+      velocidade_media = ifelse(AIR_TIME > 0, 
+                               (DISTANCE / AIR_TIME) * 60 , # velocidade média em milhas por hora
+                               NA_real_) # garante que a coluna permaneça numérica mesmo que não exista dados
+    )
+  
+  # PARTE 2: CRIAÇÃO DO MAPA
+  
+  message("Criando mapa do trajeto...")
+  
+  # Criar mapa base
+  mapa <- leaflet() %>%
+    addTiles() %>%
+    addProviderTiles(providers$CartoDB.Positron)
+  
+  # Adicionar trajetos ao mapa
+  for (i in 1:(nrow(trajetos_finais) - 1)) {
+    # Obter coordenadas de origem e destino
+    origem <- c(trajetos_finais$origin_lon[i], trajetos_finais$origin_lat[i])
+    destino <- c(trajetos_finais$origin_lon[i + 1], trajetos_finais$origin_lat[i + 1])
+    
+    # Calcular espessura da linha baseada na velocidade média
+    espessura <- ifelse(is.na(trajetos_finais$velocidade_media[i]), 
+                       3, 
+                       scales::rescale(trajetos_finais$velocidade_media[i], 
+                                      to = c(1, 10)))
+    
+    # Adicionar linha do trajeto
+    mapa <- mapa %>%
+      addPolylines(
+        lng = c(origem[1], destino[1]),
+        lat = c(origem[2], destino[2]),
+        weight = espessura,
+        color = "#2c7bb6",
+        opacity = 0.8,
+        popup = paste(
+          "Voo: ", trajetos_finais$ORIGIN_AIRPORT[i], "-", 
+          trajetos_finais$DESTINATION_AIRPORT[i], "<br>",
+          "Data: ", trajetos_finais$DATA_HORA[i], "<br>",
+          "Velocidade Média: ", round(trajetos_finais$velocidade_media[i], 1), " mph<br>",
+          "Distância: ", trajetos_finais$DISTANCE[i], " miles"
+        )
+      )
+  }
+  
+  # Adicionar marcadores para todos os aeroportos visitados
+  aeroportos_visitados <- unique(c(trajetos_finais$ORIGIN_AIRPORT, 
+                                  trajetos_finais$DESTINATION_AIRPORT))
+  
+  coordenadas_aeroportos <- airports %>%
+    filter(IATA_CODE %in% aeroportos_visitados)
+  
+  mapa <- mapa %>%
+    addCircleMarkers(
+      lng = coordenadas_aeroportos$LONGITUDE,
+      lat = coordenadas_aeroportos$LATITUDE,
+      radius = 5,
+      color = "#d73027",
+      fillColor = "#d73027",
+      fillOpacity = 0.8,
+      popup = coordenadas_aeroportos$IATA_CODE,
+      label = coordenadas_aeroportos$IATA_CODE
+    )
+  
+  # Adicionar título e legenda
+  mapa <- mapa %>%
+    addControl(
+      position = "topright",
+      html = paste(
+        "<h4>Trajeto da Aeronave", tail_number, "</h4>",
+        "<p>Espessura da linha indica velocidade média</p>",
+        "<p>Pontos vermelhos: aeroportos visitados</p>"
+      )
+    )
+  
+  # PARTE 3: PREPARAR DADOS FINAIS
+  
+  # Selecionar colunas relevantes para a tabela final
+  tabela_final <- trajetos_finais %>%
+    select(
+      YEAR, MONTH, DAY, DAY_OF_WEEK, AIRLINE, FLIGHT_NUMBER, TAIL_NUMBER, ORIGIN_AIRPORT, DESTINATION_AIRPORT,
+      SCHEDULED_DEPARTURE, DEPARTURE_TIME, DEPARTURE_DELAY, TAXI_OUT, WHEELS_OFF, SCHEDULED_TIME, ELAPSED_TIME, 
+      AIR_TIME, DISTANCE, WHEELS_ON, TAXI_IN, SCHEDULED_ARRIVAL, ARRIVAL_TIME, ARRIVAL_DELAY, DIVERTED, CANCELLED,
+      CANCELLATION_REASON, AIR_SYSTEM_DELAY, SECURITY_DELAY, AIRLINE_DELAY, LATE_AIRCRAFT_DELAY, WEATHER_DELAY,
+      origin_lat, origin_lon, destination_lat, destination_lon, velocidade_media
+    ) %>% arrange(YEAR, MONTH, DAY, DEPARTURE_TIME)
+  
+  # Retornar resultados
+  return(list(
+    tabela = tabela_final,
+    mapa = mapa
+  ))
+}
+```
+
+```{r}
+# Exemplo de uso da função:
+# resultado <- analisa_aeronave("N431WN", "dados/flights.csv.zip")
+# resultado$tabela  # Para visualizar a tabela
+# resultado$mapa    # Para visualizar o mapa
+```
+
+```{r}
+resultado <- analisa_aeronave("N431WN", "flights.csv.zip")
+resultado$tabela
+resultado$mapa
+```
