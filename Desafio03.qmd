@@ -1,0 +1,44 @@
+---
+title: "Desafio03"
+author: "Gustavo Zanareli Andrade"
+format: html
+editor: visual
+---
+
+Unicamper nasceu pra brilhar, então bora lapidar ainda mais esse brilho com um novo desafio (que poderá ser entregue até o dia 02/09 às 9:59).
+
+Traga um exemplo de um arquivo parquet e outro JSON
+
+Carregue cada um deles no R de forma que o arquivo carregado seja um data frame (ou um tibble).
+
+No dia 02/09, chamarei aleatoriamente algum dos que enviaram o desafio para que expliquem em sala de aula o que fizeram (e como fizeram)
+
+Carregar os dados, o qmd e arquivo explicando os dados e como lê-los, em formato PDF.
+
+```{r}
+#Por algum motivo não consegui renderizar meu código com as seguintes linhas:
+
+#install.packages("arrow")
+#install.packages("jsonlite")
+
+#Por esse motivo, apenas rodei-as no console e deixei comentadas aqui.
+
+library(arrow)
+library(jsonlite)
+library(dplyr)
+
+dados_parquet <- read_parquet("data.parquet") %>% as_tibble()
+
+dados_json <- fromJSON("intents.JSON") %>% as_tibble()
+
+glimpse(dados_parquet)
+glimpse(dados_json)
+```
+
+Inicialmente tentei usar o pacote haven, mas não consegui encontrar uma solução eficiente. Daí pesquisando na internet sobre pacotes para leitura de dados do formato pedido (parquet e JSON) encontrei esses pacotes e as funções que usei acima (read_parquet; fromJSON). 
+
+Uma vez encontrados esses pacotes compatíveis, baixei-os usando a função install.packages() e depois, usando library(), carreguei os respectivos pacotes("arrow" e "jsonlite"). Além do pacote "dplyr" para usar pipe.
+
+Os bancos de dados foram baixados da plataforma kaggle, filtrados pelo seu formato, facilitando a pesquisa e movidos até a pasta respectiva, de acordo com o diretório utilizado no código.
+
+Usando as respectivas funções para ler os bancos de dados e armazenando-os em variáveis de formato tibble, utilizei a função glimpse() para mostrar as primeiras entradas desses bancos de dados.

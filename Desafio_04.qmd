@@ -1,0 +1,152 @@
+---
+title: "Desafio04"
+format: html
+editor: visual
+---
+Gustavo Zanareli Andrade - 185666
+Luciano Matheus de Floriano Araujo - 277195
+```{r}
+# Instalar e carregar pacotes necessários
+if (!require(leaflet)) {
+  if (!require(devtools)) {
+    install.packages("devtools")
+    library(devtools)
+  }
+  devtools::install_version("leaflet", version = "2.1.1")
+  library(leaflet)
+}
+
+if (!require(tidyverse)) install.packages("tidyverse")
+if (!require(lubridate)) install.packages("lubridate")
+if (!require(readr)) install.packages("readr")
+
+library(tidyverse)
+library(lubridate)
+library(readr)
+library(leaflet)
+
+# Função principal
+analisa_aeronave <- function(tail_number, arquivo_voos, arquivo_aeroportos = "airports.csv") {
+  
+  # Validação de entradas
+  if (!file.exists(arquivo_voos)) {
+    stop("Arquivo de voos não encontrado: ", arquivo_voos)
+  }
+  if (!file.exists(arquivo_aeroportos)) {
+    stop("Arquivo de aeroportos não encontrado: ", arquivo_aeroportos)
+  }
+  
+  # Leitura de dados
+  cat("Lendo dados de voos...\n")
+  voos <- read_csv_chunked(
+    arquivo_voos,
+    callback = DataFrameCallback$new(function(x, pos) x),
+    chunk_size = 1e6,
+    show_col_types = FALSE
+  )
+  
+  cat("Lendo dados de aeroportos...\n")
+  airports <- read_csv(arquivo_aeroportos, show_col_types = FALSE) %>%
+    select(IATA_CODE, LATITUDE, LONGITUDE)
+  
+  # Verificar se a aeronave existe
+  cat("Processando dados da aeronave", tail_number, "...\n")
+  dados_aeronave <- voos %>%
+    filter(TAIL_NUMBER == tail_number)
+  
+  if (nrow(dados_aeronave) == 0) {
+    warning("Nenhum voo encontrado para a aeronave: ", tail_number)
+    return(list(tabela = NULL, mapa = NULL, estatisticas = NULL))
+  }
+  
+  # Processar dados
+  dados_processados <- dados_aeronave %>%
+    mutate(
+      DATETIME = make_datetime(YEAR, MONTH, DAY, 
+                              as.numeric(DEPARTURE_TIME) %/% 100, 
+                              as.numeric(DEPARTURE_TIME) %% 100),
+      AVG_SPEED = ifelse(AIR_TIME > 0, (DISTANCE / AIR_TIME) * 60, NA_real_)
+    ) %>%
+    arrange(DATETIME) %>%
+    left_join(airports, by = c("ORIGIN_AIRPORT" = "IATA_CODE")) %>%
+    rename(ORIGIN_LAT = LATITUDE, ORIGIN_LON = LONGITUDE) %>%
+    left_join(airports, by = c("DESTINATION_AIRPORT" = "IATA_CODE")) %>%
+    rename(DEST_LAT = LATITUDE, DEST_LON = LONGITUDE) %>%
+    mutate(
+      POPUP_INFO = paste(
+        "Voo:", FLIGHT_NUMBER, 
+        "| Origem:", ORIGIN_AIRPORT, 
+        "→ Destino:", DESTINATION_AIRPORT,
+        "| Vel:", round(AVG_SPEED, 1), "mph",
+        "| Data:", as_date(DATETIME)
+      )
+    )
+  
+  # Criar mapa
+  cat("Criando mapa...\n")
+  mapa <- leaflet() %>% 
+    addTiles()
+  
+  # Adicionar trajetos
+  for (i in seq_len(nrow(dados_processados))) {
+    if (!any(is.na(c(dados_processados$ORIGIN_LAT[i], dados_processados$ORIGIN_LON[i], 
+                     dados_processados$DEST_LAT[i], dados_processados$DEST_LON[i])))) {
+      
+      mapa <- mapa %>%
+        addPolylines(
+          lng = c(dados_processados$ORIGIN_LON[i], dados_processados$DEST_LON[i]),
+          lat = c(dados_processados$ORIGIN_LAT[i], dados_processados$DEST_LAT[i]),
+          weight = pmin(8, pmax(1, dados_processados$AVG_SPEED[i] / 100)),
+          color = "blue",
+          opacity = 0.7,
+          popup = dados_processados$POPUP_INFO[i]
+        )
+    }
+  }
+  
+  # Adicionar marcadores de aeroportos
+  aeroportos_unicos <- unique(c(dados_processados$ORIGIN_AIRPORT, 
+                               dados_processados$DESTINATION_AIRPORT))
+  coords_aeroportos <- airports %>%
+    filter(IATA_CODE %in% aeroportos_unicos)
+  
+  if (nrow(coords_aeroportos) > 0) {
+    mapa <- mapa %>%
+      addCircleMarkers(
+        data = coords_aeroportos,
+        lng = ~LONGITUDE,
+        lat = ~LATITUDE,
+        radius = 4,
+        color = "red",
+        fillOpacity = 0.7,
+        popup = ~IATA_CODE
+      )
+  }
+  
+  # Calcular estatísticas
+  estatisticas <- dados_processados %>%
+    summarise(
+      total_voos = n(),
+      distancia_total_km = sum(DISTANCE, na.rm = TRUE) * 1.60934,
+      velocidade_media_kmh = mean(AVG_SPEED, na.rm = TRUE) * 1.60934,
+      aeroportos_visitados = n_distinct(c(ORIGIN_AIRPORT, DESTINATION_AIRPORT))
+    )
+  
+  cat("Análise concluída!\n")
+  
+  # Retornar resultados
+  list(
+    tabela = dados_processados,
+    mapa = mapa,
+    estatisticas = estatisticas
+  )
+}
+
+# Executar a função
+resultado <- analisa_aeronave("N431WN", "flights.csv", "airports.csv")
+
+# Ver resultados
+resultado$mapa
+head(resultado$tabela)
+resultado$estatisticas
+```

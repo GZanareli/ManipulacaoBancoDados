@@ -1,0 +1,218 @@
+---
+title: "Desafio02"
+format: html
+---
+
+```{r, include=FALSE}
+# Configurar ambiente Python 
+library(reticulate)
+
+# Usar uma versão do Python
+use_python("C:/Users/ZANA/AppData/Local/R/cache/R/reticulate/uv/cache/archive-v0/Ut3o2E_Em3ZTZi7i3ldVX/Scripts/python.exe")
+
+# Instalar os pacotes se necessário
+py_install("pandas")
+py_install("numpy")
+py_install("matplotlib") 
+py_install("seaborn")
+```
+
+```{python, include=FALSE}
+# BLOCO 0: IMPORTAÇÃO DE BIBLIOTECAS
+# Importa bibliotecas para manipulação de dados, cálculos numéricos e visualização
+import pandas as pd          # Para manipulação de dados em DataFrames
+import numpy as np           # Para cálculos numéricos e operações com arrays
+import matplotlib.pyplot as plt  # Para criação de gráficos e visualizações
+import seaborn as sns        # Para visualizações estatísticas mais avançadas
+from datetime import datetime   # Para manipulação de datas e horários
+import os                    # Para operações com sistema de arquivos
+
+# Configurar estilo visual dos gráficos
+plt.style.use('default')                  # Usa estilo padrão do matplotlib
+sns.set_palette(["#4575b4", "#d73027"])   # Define paleta de cores azul e vermelho
+```
+
+```{python}
+# BLOCO 1: EXPLICAÇÃO DAS ESTATÍSTICAS NECESSÁRIAS
+# Explica quais métricas são necessárias para calcular percentual de atrasos
+print("Para calcular o percentual de atrasos, precisamos de: Número total de voos (n) e o número de voos com atraso > 10 minutos (atrasos)")
+
+# BLOCO 2: FUNÇÃO PARA PROCESSAMENTO INICIAL DOS DADOS
+# Esta função replica a funcionalidade da getStats do R
+def get_stats(input_df):
+    """
+    Processa o DataFrame para calcular estatísticas de atrasos por companhia aérea
+    
+    Parâmetros:
+    input_df: DataFrame com dados brutos dos voos
+    
+    Retorna:
+    DataFrame com estatísticas agregadas por dia, mês e companhia aérea
+    """
+    # FILTRAGEM: Seleciona apenas companhias específicas e remove valores missing
+    filtered = input_df[
+        (input_df['AIRLINE'].isin(['AA', 'DL', 'UA', 'US'])) &  # Filtra companhias AA, DL, UA, US
+        (input_df['ARRIVAL_DELAY'].notna())                     # Remove registros com atraso missing
+    ]
+    
+    # AGRUPAMENTO E AGREGAÇÃO: Agrupa por dia, mês e companhia, calcula estatísticas
+    stats = filtered.groupby(['DAY', 'MONTH', 'AIRLINE']).agg(
+        n=('ARRIVAL_DELAY', 'size'),               # Conta total de voos por grupo
+        atrasos=('ARRIVAL_DELAY', lambda x: (x > 10).sum())  # Conta voos com atraso > 10min
+    ).reset_index()                                # Converte índice em colunas normais
+    
+    return stats
+
+print("Função get_stats criada com sucesso!")
+
+# BLOCO 3: PROCESSAMENTO DO ARQUIVO EM CHUNKS (LOTES)
+# Processa o arquivo CSV em partes para lidar com grandes volumes de dados
+def processar_dados():
+    file_path = "flights.csv"  # Caminho do arquivo de dados
+    
+    # VERIFICAÇÃO: Confirma que o arquivo existe antes de processar
+    if not os.path.exists(file_path):
+        raise FileNotFoundError("Arquivo flights.csv não encontrado!")
+    
+    try:
+        # INICIALIZAÇÃO: Lista para armazenar resultados de cada lote
+        stats_list = []
+        chunk_size = 100000  # Tamanho de cada lote (100 mil registros)
+        
+        # PROCESSAMENTO EM CHUNKS: Lê e processa o arquivo em partes
+        for i, chunk in enumerate(pd.read_csv(file_path, 
+                                            chunksize=chunk_size,  # Processa em lotes
+                                            usecols=['AIRLINE', 'DAY', 'MONTH', 'ARRIVAL_DELAY'])):  # Lê apenas colunas necessárias
+            # Processa cada lote com a função get_stats
+            stats = get_stats(chunk)
+            stats_list.append(stats)  # Adiciona resultados à lista
+            
+            # FEEDBACK DE PROGRESSO: Mostra andamento a cada 500 mil registros
+            if (i + 1) % 5 == 0:
+                print(f"Processados {(i + 1) * chunk_size} registros")
+        
+        # CONSOLIDAÇÃO: Combina resultados de todos os chunks
+        in3 = pd.concat(stats_list, ignore_index=True)  # Concatena todos os DataFrames
+        print(f"Processamento concluído! Total de grupos analisados: {len(in3)}")
+        return in3
+        
+    except Exception as e:
+        # TRATAMENTO DE ERROS: Captura e reporta qualquer erro durante o processamento
+        print(f"Erro durante o processamento do arquivo: {e}")
+        raise  # Re-lança a exceção para interromper a execução
+
+# EXECUÇÃO: Processa os dados e armazena resultado em in3
+in3 = processar_dados()
+print("Primeiras linhas dos dados processados:")
+print(in3.head())  # Mostra amostra dos dados processados
+
+# BLOCO 4: CÁLCULO DOS PERCENTUAIS DE ATRASO
+# Calcula as métricas finais de percentual de atrasos
+def compute_stats(input_df):
+    """
+    Calcula percentuais de atraso a partir das estatísticas agregadas
+    
+    Parâmetros:
+    input_df: DataFrame com estatísticas do get_stats
+    
+    Retorna:
+    DataFrame com percentuais de atraso por companhia e data
+    """
+    # AGREGAÇÃO FINAL: Soma totais por companhia, dia e mês
+    result = input_df.groupby(['AIRLINE', 'DAY', 'MONTH']).agg(
+        total_atrasos=('atrasos', 'sum'),    # Soma total de voos atrasados
+        total_voos=('n', 'sum')              # Soma total de voos
+    ).reset_index()
+    
+    # CÁLCULO DO PERCENTUAL: Divide atrasos pelo total de voos
+    result['Perc'] = result['total_atrasos'] / result['total_voos']
+    
+    # FORMATAÇÃO DA DATA: Cria coluna de data no formato AAAA-MM-DD
+    result['Data'] = result.apply(
+        lambda row: datetime(2015, row['MONTH'], row['DAY']).strftime('%Y-%m-%d'), 
+        axis=1  # Aplica a função a cada linha
+    )
+    
+    # SELEÇÃO DE COLUNAS: Retorna apenas colunas relevantes para análise final
+    return result[['AIRLINE', 'Data', 'Perc']]
+
+# EXECUÇÃO: Aplica a função aos dados processados
+in5 = compute_stats(in3)
+print("Primeiras linhas do resultado final (percentuais de atraso):")
+print(in5.head())  # Mostra amostra dos resultados finais
+
+# BLOCO 5: CRIAÇÃO DOS MAPAS DE CALOR EM FORMATO DE CALENDÁRIO
+# Configura paleta de cores divergente (azul para baixo, vermelho para alto)
+div_pal = sns.diverging_palette(220, 20, as_cmap=True)
+
+def base_calendario(stats, cia):
+    """
+    Gera mapa de calor no formato de calendário para uma companhia aérea
+    
+    Parâmetros:
+    stats: DataFrame com percentuais de atraso
+    cia: Sigla da companhia aérea (AA, DL, UA, US)
+    
+    Retorna:
+    Figura matplotlib com mapa de calor
+    """
+    # FILTRAGEM: Seleciona dados apenas da companhia específica
+    cia_data = stats[stats['AIRLINE'] == cia].copy()
+    
+    # CONVERSÃO DE DATA: Converte string para objeto datetime
+    cia_data['Data'] = pd.to_datetime(cia_data['Data'])
+    
+    # EXTRAÇÃO: Extrai dia do mês e nome do mês das datas
+    cia_data['Dia'] = cia_data['Data'].dt.day
+    cia_data['Mes'] = cia_data['Data'].dt.month_name()
+    
+    # PREPARAÇÃO PARA HEATMAP: Organiza dados em formato matricial
+    heatmap_data = cia_data.pivot_table(
+        values='Perc',       # Valores a serem plotados (percentuais)
+        index='Dia',         # Linhas = dias do mês
+        columns='Mes',       # Colunas = meses
+        aggfunc='mean'       # Função de agregação (média)
+    )
+    
+    # ORDENAÇÃO: Organiza meses em ordem cronológica
+    month_order = ['January', 'February', 'March', 'April', 'May', 'June',
+                  'July', 'August', 'September', 'October', 'November', 'December']
+    heatmap_data = heatmap_data.reindex(columns=month_order, fill_value=0)
+    
+    # CRIAÇÃO DA FIGURA: Configura tamanho e layout do gráfico
+    fig, ax = plt.subplots(figsize=(12, 8))
+    
+    # PLOTAGEM DO HEATMAP: Cria mapa de calor com paleta divergente
+    im = ax.imshow(heatmap_data.T,  # Transpõe matriz para meses nas linhas
+                  cmap=div_pal,     # Usa paleta de cores azul-vermelho
+                  aspect='auto')    # Ajusta aspecto automaticamente
+    
+    # CONFIGURAÇÃO DOS EIXOS: Define ticks e labels
+    ax.set_xticks(range(len(heatmap_data.index)))          # Posições dos ticks no eixo X
+    ax.set_xticklabels(heatmap_data.index)                 # Labels = dias do mês
+    ax.set_yticks(range(len(heatmap_data.columns)))        # Posições dos ticks no eixo Y
+    ax.set_yticklabels(heatmap_data.columns)               # Labels = nomes dos meses
+    
+    # BARRA DE CORES: Adiciona legenda para as cores
+    cbar = plt.colorbar(im, ax=ax)
+    cbar.set_label('Percentual de Atrasos')  # Label da barra de cores
+    
+    # FORMATAÇÃO: Rotaciona labels do eixo X para melhor visualização
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
+    
+    # TÍTULO: Adiciona título com nome da companhia
+    ax.set_title(f"Taxa de Atrasos - {cia}", pad=20, fontsize=16)
+    
+    # AJUSTE DE LAYOUT: Otimiza espaçamento
+    plt.tight_layout()
+    
+    return fig
+
+# EXECUÇÃO: Gera mapas de calor para cada companhia aérea
+cias = ['AA', 'DL', 'UA', 'US']  # Lista de companhias aéreas a analisar
+
+for cia in cias:
+    print(f"Gerando mapa de calor para {cia}...")
+    fig = base_calendario(in5, cia)  # Gera figura para cada companhia
+    plt.show()                       # Exibe a figura
+```
