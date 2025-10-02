@@ -43,8 +43,6 @@ aeroportos.head(2)
 wdi = pl.read_excel("WDIEXCEL.xlsx", sheet_name = "Country",
                     columns = ["Short Name", "Region"])
 wdi.head(2)
-
-# O pacote que esse conjunto de dados pede (pyarrow), não parece ser compatível com a máquina do IMECC. Por essa razão deve aparecer uma mensagem de erro abaixo.
 ```
 
 ```{python} 
@@ -179,10 +177,8 @@ print(res_oj)
 
 ```{python}
 # Cross Join entre "clientes" e "pedidos". O erro a seguir aparece:
-# ValueError: cross join should not pass join keys.
-# Não soube como resolvê-lo 
-# res_cj = clientes.join(pedidos, on="cliente_id", how="cross")
-# print(res_cj)
+res_cj = clientes.join(pedidos, how="cross")
+print(res_cj)
 ```
 
 ```{python}
