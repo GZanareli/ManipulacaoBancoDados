@@ -1,0 +1,234 @@
+---
+title: "Desafio 10"
+format: html
+editor: visual
+---
+
+```{r}
+# Data e hora de compilação
+print(paste("Arquivo compilado em:", Sys.time()))
+```
+
+```{r}
+# Instalando o pacote reticulate 
+#install.packages("reticulate")
+
+# Carregue o pacote
+#library(reticulate)
+
+# Execute o comando Python
+#py_run_string("import pip; from pip._internal.cli.main import main; main(['install', '--upgrade', 'pip'])")
+```
+
+```{python}
+# Instalando a biblioteca polars e fastexcel
+#!pip install polars
+#!pip install fastexcel
+```
+
+```{python}
+# Importando o pacote com seu alias
+import polars as pl
+```
+
+```{python}
+# Importa o banco de dados "airports", selecionando 3 colunas e depois mostra duas linhas de observações
+aeroportos = pl.read_csv("airports.csv",
+                         columns = ["IATA_CODE", "CITY", "STATE"])
+aeroportos.head(2)
+```
+
+```{python}
+# Importa o banco de dados "WDIEXCEL", selecionando a aba e duas colunas específicas, depois mostra duas linhas de observações
+wdi = pl.read_excel("WDIEXCEL.xlsx", sheet_name = "Country",
+                    columns = ["Short Name", "Region"])
+wdi.head(2)
+
+# O pacote que esse conjunto de dados pede (pyarrow), não parece ser compatível com a máquina do IMECC. Por essa razão deve aparecer uma mensagem de erro abaixo.
+```
+
+```{python} 
+# Cria um data frame simples 
+df = pl.DataFrame({
+    "grupo": ["A", "A", "B", "B", "C"],
+    "valor1": [10, 15, 10, None, 25],
+    "valor2": [5, None, 20, 30, None]
+})
+df
+```
+
+```{python}
+# Mostra a coluna "valor1" do data frame
+df["valor1"]
+```
+
+```{python}
+# Mostra a média dos valores da coluna "valor1" do data frame
+df["valor1"].mean()
+```
+
+```{python}
+# Mesma análise da coluna "valor1", mas omitindo valores vazios "null"
+df["valor1"].drop_nulls()
+```
+
+```{python}
+# Mostra a média dos valores da coluna "valor1" do data frame, omitindo valores vazios, "null"
+df["valor1"].drop_nulls().mean()
+```
+
+```{python}
+# Seleciona a média da coluna "valor1" e "valor2", além de mostrar a média do valor 1 como "media_v1" 
+df.select([
+  pl.col("valor1").mean().alias("media_v1"),
+  pl.col("valor2").mean()
+])
+```
+
+```{python}
+# Agrupa os dados pela coluna "grupo", calcula a média de "valor1" para cada grupo, calcula o valor mínimo de "valor2" para cada grupo e ordena o resultado pela coluna "grupo"
+df.group_by("grupo").agg([
+  pl.col("valor1").mean().alias("media_valor1"),
+  pl.col("valor2").min().alias("min_valor2")
+]).sort("grupo")
+```
+
+```{python}
+# Importa o banco de dados "flights", selecionando 3 colunas. Além de especificar os tipos de dados das colunas
+voos = pl.read_csv("flights.csv",
+                   columns = ["AIRLINE", "ARRIVAL_DELAY", "DESTINATION_AIRPORT"],
+                   schema_overrides = {"AIRLINE": pl.Utf8,
+                             "ARRIVAL_DELAY": pl.Int32,
+                             "DESTINATION_AIRPORT": pl.Utf8})
+voos.shape
+```
+
+```{python}
+# Mostra as 3 primeiras linhas de observações de voos
+voos.head(3)
+```
+
+```{python}
+# Limpa e filtra dados de voos específicos, depois calcula a taxa de atrasos por companhia aérea e aeroporto de destino.
+# Resulta numa análise de performance operacional mostrando a proporção de voos com mais de 30 minutos de atraso para cada rota.
+resultado = (
+  voos.drop_nulls(["AIRLINE", "DESTINATION_AIRPORT", "ARRIVAL_DELAY"])
+  .filter(
+    pl.col("AIRLINE").is_in(["AA", "DL"]) &
+    pl.col("DESTINATION_AIRPORT").is_in(["SEA", "MIA", "BWI"])
+    )
+    .group_by(["AIRLINE", "DESTINATION_AIRPORT"])
+    .agg([
+      (pl.col("ARRIVAL_DELAY") > 30).mean().alias("atraso_medio")
+      ])
+)
+```
+
+```{python}
+# Ordena o resultado pela coluna "atraso_medio"
+resultado.sort("atraso_medio")
+```
+
+## Dados Relacionais com Polars ##
+
+```{python}
+
+# Criando Data Frame "clientes"
+clientes = pl.DataFrame({
+    "cliente_id": [1, 2, 3, 4],
+    "nome": ["Ana", "Bruno", "Clara", "Daniel"]
+})
+
+print(clientes)
+```
+
+```{python}
+# Criando data frame "pedidos"
+pedidos = pl.DataFrame({
+    "pedido_id": [101, 102, 103, 104, 105],
+    "cliente_id": [1, 2, 3, 1, 5],
+    "valor": [100.50, 250.75, 75.00, 130.00, 79.00]
+})
+
+print(pedidos)
+```
+
+```{python}
+# Inner Join entre "clientes" e "pedidos"
+res_ij = clientes.join(pedidos, on="cliente_id", how="inner")
+print(res_ij)
+```
+
+```{python}
+# Left Join entre "clientes" e "pedidos"
+res_lj = clientes.join(pedidos, on="cliente_id", how="left")
+print(res_lj)
+```
+
+```{python}
+# Right Join entre "clientes" e "pedidos"
+res_rj = clientes.join(pedidos, on="cliente_id", how="right")
+print(res_rj)
+```
+
+```{python}
+# Outer Join entre "clientes" e "pedidos"
+res_oj = clientes.join(pedidos, on="cliente_id", how="outer")
+print(res_oj)
+```
+
+```{python}
+# Cross Join entre "clientes" e "pedidos". O erro a seguir aparece:
+# ValueError: cross join should not pass join keys.
+# Não soube como resolvê-lo 
+# res_cj = clientes.join(pedidos, on="cliente_id", how="cross")
+# print(res_cj)
+```
+
+```{python}
+# P1: Qual é o valor médio das compras realizadas para cada cliente identificado?
+
+res = res_ij.group_by(["nome", "cliente_id"]).agg(pl.col("valor").mean())
+print(res)
+```
+
+```{python}
+# P2: Informe os nomes e a quantidade de compras com valor mínimo de $100.00 realizadas por cada cliente.
+
+res = (res_oj.with_columns(pl.col("valor") > 100)
+       .group_by("nome")
+       .agg(pl.col("valor").sum()))
+print(res)
+```
+
+```{python}
+# JOIN com Múltiplas Colunas como Chave, novos data frames "vendas" e "detalhes_pedidos"
+vendas = pl.DataFrame({
+    "id_venda": [1, 2, 3],
+    "id_cl": [1, 2, 1],
+    "id_prod": [101, 102, 103],
+    "qtde": [2, 1, 1]
+})
+
+detalhes_pedidos = pl.DataFrame({
+    "id_ped": [201, 202, 203],
+    "cl_id": [1, 2, 1],
+    "id_prod": [101, 102, 104],
+    "valor": [50.00, 75.00, 100.00]
+})
+```
+
+```{python}
+# Mostrando os data frames criados
+print(vendas)
+print(detalhes_pedidos)
+```
+
+```{python}
+# Criando um data frame "final", vindo de um join com múltiplas colunas.
+final = vendas.join(detalhes_pedidos,
+                    left_on = ["id_cl", "id_prod"],
+                    right_on = ["cl_id", "id_prod"],
+                    how = "inner")
+print(final)
+```
