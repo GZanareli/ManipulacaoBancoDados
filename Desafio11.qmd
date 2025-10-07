@@ -1,0 +1,167 @@
+---
+title: "Desafio11"
+format: html
+editor: visual
+---
+
+Laboratório: Introdução ao Polars
+Importação e Manipulação de Dados Utilizando Polars
+
+Introdução
+
+Polars é uma biblioteca de manipulação de dados em Rust que foi projetada para ser rápida e eficiente, especialmente quando se trata de lidar com grandes conjuntos de dados. A principal vantagem do Polars em comparação com outras bibliotecas de manipulação de dados, como o pandas, é sua capacidade de processar dados em paralelo, aproveitando múltiplos núcleos de CPU. Isso resulta em operações significativamente mais rápidas, permitindo que analistas e cientistas de dados realizem tarefas complexas de transformação e agregação em grandes volumes de dados com eficiência. Além disso, a API do Polars é inspirada na do pandas, o que facilita a transição para usuários que já estão familiarizados com o ecossistema de Python.
+
+Na ciência de dados, a capacidade de manipular e analisar grandes quantidades de dados de forma rápida e eficiente é crucial para a extração de insights significativos. Polars é particularmente valioso em cenários onde o desempenho é uma preocupação, como em análises em tempo real ou no processamento de grandes fluxos de dados. Sua integração com outras bibliotecas populares, como NumPy e Matplotlib, e sua compatibilidade com arquivos em formatos como CSV e Parquet tornam o Polars uma ferramenta versátil para cientistas de dados que buscam otimizar suas operações e maximizar a eficiência de suas análises. Com a crescente demanda por soluções de dados escaláveis, o Polars se destaca como uma opção promissora no arsenal de ferramentas de ciência de dados.
+
+Objetivos
+
+Ao fim deste laboratório, você deverá:
+
+Ser capaz de importar arquivos tabulares (CSV ou TSV) utilizando a biblioteca Polars.
+Organizar e transformar tabelas de dados.
+Compreender operações básicas de manipulação de dados, como seleção, filtragem e ordenação.
+Calcular estatísticas descritivas e agrupadas utilizando as funções disponíveis no Polars.
+Criar visualizações informativas usando plotnine.
+Conjunto de Dados
+O conjunto de dados “Renda Adulta” contém informações demográficas e econômicas de indivíduos, que são utilizadas para prever se um indivíduo ganha mais ou menos de $50.000 por ano.
+
+Atividade
+
+```{r}
+# Carregando o pacote reticulate
+library(reticulate)
+
+# Execute o comando Python
+py_run_string("import pip; from pip._internal.cli.main import main; main(['install', '--upgrade', 'pip'])")
+```
+
+```{python}
+# Importando o pacote com seu alias
+import polars as pl
+```
+
+0. Não esquecer de colocar um comando no código que "printe" o dia e hora que foi compilado o arquivo.
+
+```{r}
+# Data e hora de compilação
+print(paste("Arquivo compilado em:", Sys.time()))
+```
+
+1. Utilizando o arquivo renda_adulta.csv e sabendo que ele não possui cabeçalho, faça a importação do banco de dados utilizando os nomes das colunas conforme apresentado acima e na sequência ali indicada. No momento da importação do arquivo, você deve, também, indicar os tipos de cada uma das colunas. Utilize o fato de que o símbolo ? representa valores faltantes.
+
+```{python}
+# 1. Importação do arquivo renda_adulta.csv.gz
+renda_adulta = pl.read_csv("renda_adulta.csv.gz",
+                         has_header=False,
+                         new_columns=["age", "workclass", "fnhugt", "education", "education-num", 
+                                    "marital-status", "occupation", "relationship", "race", "sex",
+                                    "capital-gain", "capital-loss", "hours-per-week", "native-country", "income"],
+                         null_values="?",
+                         schema_overrides={
+                             "age": pl.Int64,
+                             "workclass": pl.Utf8,
+                             "fnhugt": pl.Float64,
+                             "education": pl.Utf8,
+                             "education-num": pl.Int64,
+                             "marital-status": pl.Utf8,
+                             "occupation": pl.Utf8,
+                             "relationship": pl.Utf8,
+                             "race": pl.Utf8,
+                             "sex": pl.Utf8,
+                             "capital-gain": pl.Float64,
+                             "capital-loss": pl.Float64,
+                             "hours-per-week": pl.Int64,
+                             "native-country": pl.Utf8,
+                             "income": pl.Utf8
+                         })
+```
+
+2. Apresente os tipos de cada uma das coluna.
+
+```{python}
+print("Tipos de cada coluna:")
+print(renda_adulta.schema)
+```
+
+3. Apresente as dimensões da tabela de dados.
+
+```{python}
+print(f"Dimensões da tabela: {renda_adulta.shape}")
+```
+
+4. Quantas pessoas recebem acima de $50.000 e quantas pessoas recebem abaixo deste limiar?
+
+```{python}
+print("Distribuição de renda:")
+print(renda_adulta["income"].value_counts())
+```
+
+5. Crie um objeto chamado renda_longo, no qual você transforma as colunas capital-gain e capital-loss (formato wide) para formato longo. Os valores destas variáveis devem ser armazenados numa nova coluna chamada Valor e os tipos de valores (gain e loss) devem ser armazenados numa coluna chamada tipo.
+
+```{python}
+# Transformar colunas capital-gain e capital-loss para formato longo
+renda_longo = renda_adulta.melt(
+    id_vars=[col for col in renda_adulta.columns if col not in ["capital-gain", "capital-loss"]],  # Mantém todas as colunas exceto as que serão transformadas
+    value_vars=["capital-gain", "capital-loss"],  # Colunas que serão transformadas de wide para long
+    variable_name="tipo",  # Nome da nova coluna que armazenará os tipos (gain/loss)
+    value_name="Valor"  # Nome da nova coluna que armazenará os valores numéricos
+)
+```
+
+6. Quais são as médias de horas trabalhadas por classe salarial?
+
+```{python}
+print("Médias de horas trabalhadas por classe salarial:")
+print(renda_adulta.group_by("income").agg(pl.col("hours-per-week").mean()))
+```
+
+7. Se cada linha representa uma pessoa, quantas pessoas foram amostradas em cada profissão?
+
+```{python}
+# Quantas pessoas foram amostradas em cada profissão?
+print("Número de pessoas por profissão:")
+print(renda_adulta["occupation"].value_counts())
+```
+
+8. Crie um gráfico de barras que apresente o número médio de horas trabalhadas semanalmente em função do nível salarial.
+
+```{python}
+# Gráfico de barras usando apenas polars 
+# Calcular médias manualmente
+medias = []
+categorias = []
+
+for income_level in ['<=50K', '>50K']:
+    media = renda_adulta.filter(pl.col('income') == income_level)['hours-per-week'].mean()
+    medias.append(media)
+    categorias.append(income_level)
+
+print("Média de Horas Trabalhadas por Semana por Nível Salarial")
+print("=" * 55)
+
+# Criar gráfico ASCII simples
+max_media = max(medias)
+for i, (cat, media) in enumerate(zip(categorias, medias)):
+    bar_length = int((media / max_media) * 40)  # Escala para 40 caracteres
+    bar = '█' * bar_length
+    print(f"{cat:6}: {bar} {media:.1f} horas")
+
+print(f"\nResumo:")
+print(f"<=50K: {medias[0]:.1f} horas/semana")
+print(f">50K:  {medias[1]:.1f} horas/semana")
+print(f"Diferença: {medias[1] - medias[0]:.1f} horas")
+```
+
+9. Existe alguma evidência de discriminação salarial entre gêneros biológicos?
+
+```{python}
+# Análise da distribuição de renda por gênero
+tabela_genero_renda = renda_adulta.group_by("sex", "income").agg(
+    pl.col("age").count().alias("count")
+)
+
+print("Distribuição de renda por gênero:")
+print(tabela_genero_renda)
+```
+
+Com base na análise dos dados, existe forte evidência de discriminação salarial entre gêneros biológicos. Os resultados mostram que apenas 10,9% das mulheres estão na faixa de alta renda (acima de US$ 50.000 anuais), enquanto entre os homens essa proporção sobe para 30,5%. Esta disparidade significa que os homens têm quase três vezes mais probabilidade de estarem na categoria salarial mais elevada em comparação com as mulheres. A diferença percentual de aproximadamente 20 pontos percentuais entre os gêneros na faixa de alta renda configura um cenário de significativa desigualdade salarial relacionada ao gênero no conjunto de dados analisado.
