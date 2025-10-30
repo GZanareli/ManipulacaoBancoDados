@@ -13,3 +13,4 @@ https://gzanareli.github.io/ManipulacaoBancoDados/Desafio10.html
 https://gzanareli.github.io/ManipulacaoBancoDados/Desafio11.html
 https://gzanareli.github.io/ManipulacaoBancoDados/Desafio12.html
 https://gzanareli.github.io/ManipulacaoBancoDados/Desafio13.html
+https://gzanareli.github.io/ManipulacaoBancoDados/Desafio14.html
